@@ -2,6 +2,8 @@
 
 This repository contains a small application in an attempt to reproduce an issue involving `crossgen2` and `LanguageExt` (v4.0.2). It seems that applications using `LanguageExt` can't be published using the "ReadyToRun" option, when building it looks like crossgen is very busy cross-joining all generics from `LanguageExt` with each other. This didn't happen with `crossgen1` when using .NET 5.
 
+Check the changelog at the end of this README for all the changes, workarounds and experiments.
+
 # Setup and reproduction
 
 There are two project files, one for .NET 5 and one for .NET 6 with their own build profiles. Running both applications just from the commandline works fine;
@@ -157,3 +159,25 @@ Host (useful for support):
 To install additional .NET runtimes or SDKs:
   https://aka.ms/dotnet-download
 ```
+
+# Changelog
+
+## 2022-03-04 Updating the SDK
+
+I've updated my SDK by downloading the most recent version of .NET 6, `dotnet --info` now reports that I'm running version `6.0.200`. RRunning the build with the newer version of .NET 6 didn't change anything of significance;
+
+```bash
+$ time dotnet publish ./AndreSteenveld.CrossgenLanguageExt6.csproj -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:PublishReadyToRunCrossgen2ExtraArgs='--verbose' --configuration Release --runtime win-x64 --self-contained trueMicrosoft (R) Build Engine version 17.1.0+ae57d105c for .NET
+Copyright (C) Microsoft Corporation. All rights reserved.   
+  Determining projects to restore...
+  Restored C:\Users\asteenveld\source\repos\AndreSteenveld.CrossgenLanguageExt\AndreSteenveld.CrossgenLanguageExt6.csproj (in 1.38 sec).
+  AndreSteenveld.CrossgenLanguageExt6 -> C:\Users\asteenveld\source\repos\AndreSteenveld.CrossgenLanguageExt\bin\Release\net6.0\win-x64\AndreSteenveld.CrossgenLanguageExt6.dll
+Attempting to cancel the build...
+C:\Program Files\dotnet\sdk\6.0.200\Sdks\Microsoft.NET.Sdk\targets\Microsoft.NET.CrossGen.targets(463,5): warning MSB5021: Terminating the task executable "crossgen2" and its child processes because the build was canceled. [C:\Users\asteenveld\source\rep
+os\AndreSteenveld.CrossgenLanguageExt\AndreSteenveld.CrossgenLanguageExt6.csproj]
+
+real   	46m55.785s
+user   	0m0.000s
+sys    	0m0.078s
+```
+
