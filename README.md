@@ -167,7 +167,8 @@ To install additional .NET runtimes or SDKs:
 I've updated my SDK by downloading the most recent version of .NET 6, `dotnet --info` now reports that I'm running version `6.0.200`. RRunning the build with the newer version of .NET 6 didn't change anything of significance;
 
 ```bash
-$ time dotnet publish ./AndreSteenveld.CrossgenLanguageExt6.csproj -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:PublishReadyToRunCrossgen2ExtraArgs='--verbose' --configuration Release --runtime win-x64 --self-contained trueMicrosoft (R) Build Engine version 17.1.0+ae57d105c for .NET
+$ time dotnet publish ./AndreSteenveld.CrossgenLanguageExt6.csproj -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:PublishReadyToRunCrossgen2ExtraArgs='--verbose' --configuration Release --runtime win-x64 --self-contained true
+Microsoft (R) Build Engine version 17.1.0+ae57d105c for .NET
 Copyright (C) Microsoft Corporation. All rights reserved.   
   Determining projects to restore...
   Restored C:\Users\asteenveld\source\repos\AndreSteenveld.CrossgenLanguageExt\AndreSteenveld.CrossgenLanguageExt6.csproj (in 1.38 sec).
@@ -179,5 +180,70 @@ os\AndreSteenveld.CrossgenLanguageExt\AndreSteenveld.CrossgenLanguageExt6.csproj
 real   	46m55.785s
 user   	0m0.000s
 sys    	0m0.078s
+```
+
+## 2022-03-05 Running the build in a docker container
+
+Going on a information provided by [@WarrenFerrell](https://github.com/WarrenFerrell) in the ticket in the LanguageExt repository [link](https://github.com/louthy/language-ext/issues/1000) it should work in a docker container. This is great news as there appears to be a way to make this work. If compiling the application works inside the docker container (targeting linux, x86-64) it would narrow down this issue to something specific in the windows build of `crossgen2`.
+
+I am not going to bother creating a docker file for .NET 5 here and just focus on .NET 6 from here on. Before baking an image I just want it to compile and started a container interactively and just ran the commands;
+
+```bash
+#
+# Starting with an interactive session, I'm not using docker-for-windows but do have a separate machine with a samba mount nothing
+# super fancy or out of the ordinary.
+#
+$ docker run --rm --interactive --tty --volume "//c://c" --workdir "/$(cygpath --absolute .)"  mcr.microsoft.com/dotnet/sdk:latest
+
+#
+# Running the regular build and running the resulting binary, works fine
+#
+root@b911a597849a:/c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt# time dotnet publish ./AndreSteenveld.CrossgenLanguageExt6.csproj -p:PublishSingleFile=true --configuration Release --runtime linux-x64 --self-contained true
+Microsoft (R) Build Engine version 17.1.0+ae57d105c for .NET
+Copyright (C) Microsoft Corporation. All rights reserved.   
+
+  Determining projects to restore...
+  Restored /c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt/AndreSteenveld.CrossgenLanguageExt6.csproj (in 12.53 sec).
+  AndreSteenveld.CrossgenLanguageExt6 -> /c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt/bin/Release/net6.0/linux-x64/AndreSteenveld.CrossgenLanguageExt6.dll
+  AndreSteenveld.CrossgenLanguageExt6 -> /c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt/bin/Release/net6.0/linux-x64/publish/
+
+real    0m26.436s
+user    0m18.284s
+sys     0m7.243s
+root@b911a597849a:/c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt# ./bin/Release/net6.0/linux-x64/publish/AndreSteenveld.CrossgenLanguageExt6
+Hello world
+
+#
+# Running the build in the docker container also doesn't work out of the gate, although there is a lot more output. I'm also surprised by 
+# the amount of time spent in the kernel on the other hand this could just as well be something that isn't measured correctly in the 
+# version of `time` that ships with git bash.
+#
+root@b911a597849a:/c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt# time dotnet publish ./AndreSteenveld.CrossgenLanguageExt6.csproj -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:PublishReadyToRunCrossgen2ExtraArgs='--verbose' --configuration Release --runtime linux-x64 --self-contained true
+Microsoft (R) Build Engine version 17.1.0+ae57d105c for .NET
+Copyright (C) Microsoft Corporation. All rights reserved.   
+
+  Determining projects to restore...
+  Restored /c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt/AndreSteenveld.CrossgenLanguageExt6.csproj (in 13.27 sec).
+  AndreSteenveld.CrossgenLanguageExt6 -> /c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt/bin/Release/net6.0/linux-x64/AndreSteenveld.CrossgenLanguageExt6.dll
+^CAttempting to cancel the build...
+/usr/share/dotnet/sdk/6.0.200/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.CrossGen.targets(463,5): warning MSB5021: Terminating the task executable "crossgen2" and its child processes because the build was canceled. [/c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt/AndreSteenveld.CrossgenLanguageExt6.csproj]
+/usr/share/dotnet/sdk/6.0.200/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.CrossGen.targets(463,5): error MSB6003: The specified task executable "/root/.nuget/packages/microsoft.netcore.app.crossgen2.linux-x64/6.0.2/tools/crossgen2" could not be run. System.ComponentModel.Win32Exception (2): An error occurred trying to start process 'pgrep' with working directory '/c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt'. No such file or directory [/c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt/AndreSteenveld.CrossgenLanguageExt6.csproj]
+/usr/share/dotnet/sdk/6.0.200/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.CrossGen.targets(463,5): error MSB6003:    at System.Diagnostics.Process.ForkAndExecProcess(ProcessStartInfo startInfo, String resolvedFilename, String[] argv, String[] envp, String cwd, Boolean setCredentials, UInt32 userId, UInt32 groupId, UInt32[] groups, Int32& stdinFd, Int32& stdoutFd, Int32& stderrFd, Boolean usesTerminal, Boolean throwOnNoExec) [/c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt/AndreSteenveld.CrossgenLanguageExt6.csproj]
+/usr/share/dotnet/sdk/6.0.200/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.CrossGen.targets(463,5): error MSB6003:    at System.Diagnostics.Process.StartCore(ProcessStartInfo startInfo) [/c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt/AndreSteenveld.CrossgenLanguageExt6.csproj]
+/usr/share/dotnet/sdk/6.0.200/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.CrossGen.targets(463,5): error MSB6003:    at System.Diagnostics.Process.Start() [/c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt/AndreSteenveld.CrossgenLanguageExt6.csproj]
+/usr/share/dotnet/sdk/6.0.200/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.CrossGen.targets(463,5): error MSB6003:    at System.Diagnostics.Process.Start(ProcessStartInfo startInfo) [/c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt/AndreSteenveld.CrossgenLanguageExt6.csproj]
+/usr/share/dotnet/sdk/6.0.200/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.CrossGen.targets(463,5): error MSB6003:    at Microsoft.Build.Shared.ProcessExtensions.RunProcessAndWaitForExit(String fileName, String arguments, String& stdout) [/c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt/AndreSteenveld.CrossgenLanguageExt6.csproj]
+/usr/share/dotnet/sdk/6.0.200/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.CrossGen.targets(463,5): error MSB6003:    at Microsoft.Build.Shared.ProcessExtensions.GetAllChildIdsUnix(Int32 parentId, ISet`1 children) [/c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt/AndreSteenveld.CrossgenLanguageExt6.csproj]
+/usr/share/dotnet/sdk/6.0.200/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.CrossGen.targets(463,5): error MSB6003:    at Microsoft.Build.Shared.ProcessExtensions.KillTree(Process process, Int32 timeoutMilliseconds) [/c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt/AndreSteenveld.CrossgenLanguageExt6.csproj]
+/usr/share/dotnet/sdk/6.0.200/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.CrossGen.targets(463,5): error MSB6003:    at Microsoft.Build.Utilities.ToolTask.KillToolProcessOnTimeout(Process proc, Boolean isBeingCancelled) [/c/Users/asteenveld/source/repo/AndreSteenveld.CrossgenLanguageExt/AndreSteenveld.CrossgenLanguageExt6.csproj]
+/usr/share/dotnet/sdk/6.0.200/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.CrossGen.targets(463,5): error MSB6003:    at Microsoft.Build.Utilities.ToolTask.TerminateToolProcess(Process proc, Boolean isBeingCancelled) [/c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt/AndreSteenveld.CrossgenLanguageExt6.csproj]
+/usr/share/dotnet/sdk/6.0.200/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.CrossGen.targets(463,5): error MSB6003:    at Microsoft.Build.Utilities.ToolTask.HandleToolNotifications(Process proc) [/c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt/AndreSteenveld.CrossgenLanguageExt6.csproj]
+/usr/share/dotnet/sdk/6.0.200/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.CrossGen.targets(463,5): error MSB6003:    at Microsoft.Build.Utilities.ToolTask.ExecuteTool(String pathToTool, String responseFileCommands, String commandLineCommands) [/c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt/AndreSteenveld.CrossgenLanguageExt6.csproj]
+/usr/share/dotnet/sdk/6.0.200/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.CrossGen.targets(463,5): error MSB6003:    at Microsoft.NET.Build.Tasks.RunReadyToRunCompiler.ExecuteTool(String pathToTool, String responseFileCommands, String commandLineCommands) [/c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt/AndreSteenveld.CrossgenLanguageExt6.csproj]
+/usr/share/dotnet/sdk/6.0.200/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.CrossGen.targets(463,5): error MSB6003:    at Microsoft.Build.Utilities.ToolTask.Execute() [/c/Users/asteenveld/source/repos/AndreSteenveld.CrossgenLanguageExt/AndreSteenveld.CrossgenLanguageExt6.csproj]
+
+real    39m19.029s
+user    31m51.411s
+sys     36m40.716s
 ```
 
