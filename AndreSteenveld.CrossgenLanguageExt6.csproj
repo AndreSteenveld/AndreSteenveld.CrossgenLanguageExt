@@ -11,4 +11,12 @@
     <PackageReference Include="LanguageExt.Core" Version="4.0.3" />
   </ItemGroup>
 
+  <Target Name="ConfigureTrimming" BeforeTargets="PrepareForILLink">
+    <ItemGroup>
+      <ManagedAssemblyToLink Condition="'%(Filename)' == 'LanguageExt.Core'">
+        <IsTrimmable>true</IsTrimmable>
+      </ManagedAssemblyToLink>
+    </ItemGroup>
+  </Target>
+
 </Project>

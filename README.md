@@ -247,3 +247,44 @@ user    31m51.411s
 sys     36m40.716s
 ```
 
+
+## 2022-03-21 Trimming `LanguageExt.Core`
+
+Coming back to this issue after a nasty flu; I'm happy @BrunoJuchli chimed in and managed to reproduce the issue and got some error output from crossgen2. I wanted to test the work-around of marking the `LanguageExt.Core` as trimmable and (as suggested by @WarrenFerrell). The .NET7 beta release notes mention that trimming is required for NativeAOT so I guess this might as well be the end-all-be-all solution if it works. Better would be if `LanguageExt.Core` would be marked trimmable by itself.
+
+```xml
+<!-- I've added this section to the `AndreSteenveld.CrossgrenLangueageExt6.csproj file, it was taken from: https://github.com/louthy/language-ext/issues/673#issuecomment-778358899 -->
+<Target Name="ConfigureTrimming" BeforeTargets="PrepareForILLink">
+  <ItemGroup>
+    <ManagedAssemblyToLink Condition="'%(Filename)' == 'LanguageExt.Core'">
+      <IsTrimmable>true</IsTrimmable>
+      <TrimMode>link</TrimMode>
+    </ManagedAssemblyToLink>
+  </ItemGroup>
+</Target>
+```
+
+```bash
+$ time dotnet publish ./AndreSteenveld.CrossgenLanguageExt6.csproj  \
+    --configuration Release                                         \
+    --runtime win-x64                                               \
+    --self-contained true                                           \
+    -p:PublishSingleFile=true                                       \
+    -p:PublishReadyToRun=true                                       \
+    -p:PublishReadyToRunShowWarnings=true                           \
+    -p:PublishTrimmed=true
+Microsoft (R) Build Engine version 17.1.0+ae57d105c for .NET
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+  Determining projects to restore...
+  Restored C:\Users\asteenveld\source\repos\AndreSteenveld.CrossgenLanguageExt\AndreSteenveld.CrossgenLanguageExt6.csproj (in 15.47 sec).
+  AndreSteenveld.CrossgenLanguageExt6 -> C:\Users\asteenveld\source\repos\AndreSteenveld.CrossgenLanguageExt\bin\Release\net6.0\win-x64\AndreSteenveld.CrossgenLanguageExt6.dll 
+    C:\Users\asteenveld\.nuget\packages\languageext.core\4.0.3\lib\netstandard2.0\LanguageExt.Core.dll : warning IL2104: Assembly 'LanguageExt.Core' produced trim warnings. For more information see https://aka.ms/dotnet-illink/libraries [C:\Users\asteenveld\source\repos\AndreSteenveld.CrossgenLanguageExt\AndreSteenveld.CrossgenLanguageExt6.csproj]
+  Optimizing assemblies for size, which may change the behavior of the app. Be sure to test after publishing. See: https://aka.ms/dotnet-illink
+  AndreSteenveld.CrossgenLanguageExt6 -> C:\Users\asteenveld\source\repos\AndreSteenveld.CrossgenLanguageExt\bin\Release\net6.0\win-x64\publish\
+
+real   	1m35.580s
+user   	0m0.000s
+sys    	0m0.093s
+```
+That was quick, also it worked.
